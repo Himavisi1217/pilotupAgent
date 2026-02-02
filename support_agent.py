@@ -1,40 +1,50 @@
-from typing import List, Dict
+import os
 from datetime import datetime
-import uuid
+from typing import List, Dict
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 class SupportAIAgent:
     def __init__(self, name: str):
-        self.id = str(uuid.uuid4())
         self.name = name
         self.role = "Customer Support AI Officer"
-        self.system_prompt = f"""
-You are {self.name}, a professional AI customer support officer.
-Your goals:
-- Resolve customer issues accurately
-- Be polite, calm, and helpful
-- Escalate only when necessary
-- Never hallucinate information
-"""
         self.memory: List[Dict] = []
 
-    def store_memory(self, user_msg: str, ai_msg: str):
-        self.memory.append({
-            "user": user_msg,
-            "ai": ai_msg,
-            "timestamp": datetime.utcnow().isoformat()
-        })
-
-    def think(self, user_message: str) -> str:
-        """
-        This is where the LLM would be called.
-        Replace mock logic with OpenAI / Claude / local model.
-        """
-        if "refund" in user_message.lower():
-            return "I understand your concern. Let me check your order details and refund policy."
-        
-        return "Thanks for reaching out. Could you please provide more details so I can assist you better?"
+        self.system_prompt = f"""
+You are {self.name}, a professional AI customer support officer.
+Rules:
+- Be polite and concise
+- Never invent facts
+- Ask for clarification if needed
+- Escalate complex issues
+"""
 
     def respond(self, user_message: str) -> str:
-        ai_response = self.think(user_message)
-        self.store_memory(user_message, ai_response)
-        return ai_response
+        messages = [{"role": "system", "content": self.system_prompt}]
+
+        # short-term memory
+        for m in self.memory[-5:]:
+            messages.append({"role": "user", "content": m["user"]})
+            messages.append({"role": "assistant", "content": m["ai"]})
+
+        messages.append({"role": "user", "content": user_message})
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.4
+        )
+
+        ai_reply = response.choices[0].message.content
+
+        self.memory.append({
+            "user": user_message,
+            "ai": ai_reply,
+            "time": datetime.utcnow().isoformat()
+        })
+
+        return ai_reply

@@ -1,8 +1,16 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from support_agent import SupportAIAgent
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 agent = SupportAIAgent("Pilot Support Agent")
 
 class ChatRequest(BaseModel):
