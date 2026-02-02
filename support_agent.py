@@ -1,12 +1,18 @@
 import os
 from datetime import datetime
 from typing import List, Dict
-from openai import OpenAI
+import openai
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    # Don't raise here to keep the app from crashing on import in dev; handle at call time instead
+    OPENAI_API_KEY = None
+else:
+    openai.api_key = OPENAI_API_KEY
+
 
 class SupportAIAgent:
     def __init__(self, name: str):
@@ -33,13 +39,28 @@ Rules:
 
         messages.append({"role": "user", "content": user_message})
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.4
-        )
+        if not OPENAI_API_KEY:
+            # Friendly error when key not set
+            ai_reply = "OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file."
+            self.memory.append({"user": user_message, "ai": ai_reply, "time": datetime.utcnow().isoformat()})
+            return ai_reply
 
-        ai_reply = response.choices[0].message.content
+        try:
+            # Use the standard OpenAI ChatCompletion interface
+            response = openai.ChatCompletion.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.4,
+                max_tokens=512,
+            )
+
+            # safety: validate structure
+            ai_reply = response["choices"][0]["message"]["content"]
+
+        except Exception as e:
+            # Print the exception so it's visible in uvicorn logs, and return a safe message
+            print("OpenAI API call failed:", repr(e))
+            ai_reply = "Sorry, I'm having trouble accessing the AI service right now. Please try again later."
 
         self.memory.append({
             "user": user_message,
